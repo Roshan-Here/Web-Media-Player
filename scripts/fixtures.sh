@@ -1,13 +1,15 @@
 #!/usr/bin/env sh
 # Makes the demo film and its extras in examples/demo/public/media (needs ffmpeg with libx265
 # and the Inter typeface, or set FONT to another .ttf/.otf). Everything here is generated, so
-# the demo and the screenshots carry no third-party footage.
+# the demo and the screenshots carry no third-party footage. CI makes a quicker version with
+# SIZE=640x360 PRESET=ultrafast: the same tracks, chapters and subtitles in a smaller picture.
 set -e
 dir="$(cd "$(dirname "$0")/.." && pwd)/examples/demo/public/media"
 mkdir -p "$dir"
 cd "$dir"
 FONT="${FONT:-$(fc-match -f '%{file}' 'Inter Display:bold' 2>/dev/null || true)}"
 D=150
+SIZE="${SIZE:-1280x720}"
 
 cat > chapters.txt <<'TXT'
 ;FFMETADATA1
@@ -111,9 +113,9 @@ Depuis la crête, on voyait toute la côte.
 TXT
 
 PICTURE="[0][1]blend=all_mode=screen:all_opacity=0.6,noise=alls=6:allf=t,vignette=PI/4"
-TITLE="drawtext=fontfile=$FONT:text='NORTHERN LIGHTS':fontsize=64:fontcolor=white@0.85:x=(w-tw)/2:y=h*0.36:enable='between(t,14,38)'"
-SKY="gradients=s=1280x720:r=24:n=5:c0=0x07142b:c1=0x0f5257:c2=0x37b385:c3=0x5b2a86:c4=0x050a1a:speed=0.012:type=linear:seed=7:d=$D"
-GLOW="gradients=s=1280x720:r=24:n=3:c0=0x00000000:c1=0x9be8c855:c2=0x00000000:speed=0.02:type=radial:seed=3:d=$D"
+TITLE="drawtext=fontfile=$FONT:text='NORTHERN LIGHTS':fontsize=h/11.25:fontcolor=white@0.85:x=(w-tw)/2:y=h*0.36:enable='between(t,14,38)'"
+SKY="gradients=s=$SIZE:r=24:n=5:c0=0x07142b:c1=0x0f5257:c2=0x37b385:c3=0x5b2a86:c4=0x050a1a:speed=0.012:type=linear:seed=7:d=$D"
+GLOW="gradients=s=$SIZE:r=24:n=3:c0=0x00000000:c1=0x9be8c855:c2=0x00000000:speed=0.02:type=radial:seed=3:d=$D"
 CHORD="aevalsrc='(0.18*sin(2*PI*220*t)+0.12*sin(2*PI*277.18*t)+0.1*sin(2*PI*329.63*t))*(0.75+0.25*sin(2*PI*0.1*t))':s=48000:d=$D"
 LOW="aevalsrc='(0.2*sin(2*PI*164.81*t)+0.12*sin(2*PI*246.94*t))*(0.75+0.25*sin(2*PI*0.07*t))':s=48000:d=$D"
 
@@ -121,7 +123,7 @@ ffmpeg -loglevel error -y -f lavfi -i "$SKY" -f lavfi -i "$GLOW" -f lavfi -i "$C
   -i en.srt -i es.srt -i chapters.txt \
   -filter_complex "$PICTURE,$TITLE[v]" \
   -map '[v]' -map 2:a -map 3:a -map 4 -map 5 -map_metadata 6 -map_chapters 6 \
-  -c:v libx265 -preset fast -x265-params log-level=error -crf 26 -pix_fmt yuv420p \
+  -c:v libx265 -preset "${PRESET:-fast}" -x265-params log-level=error -crf 26 -pix_fmt yuv420p \
   -c:a:0 ac3 -b:a:0 192k -c:a:1 aac -b:a:1 128k -ac 2 -c:s srt \
   -metadata:s:a:0 language=eng -metadata:s:a:0 title="English" \
   -metadata:s:a:1 language=spa -metadata:s:a:1 title="Español" \
