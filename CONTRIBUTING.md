@@ -59,3 +59,21 @@ player looks, and commit the updated `docs/images`.
 Please include the browser and system, the file's container and codecs (`ffprobe` output is
 ideal), and the diagnostics the error panel's **Copy details** button copies (or
 `ref.current.diagnostics()`).
+
+## Releasing
+
+Releases are published to npm by GitHub Actions (`.github/workflows/release.yml`) when a GitHub
+Release is published, through npm trusted publishing: no npm token is stored anywhere.
+
+1. Add the changes under a new version heading in `CHANGELOG.md`.
+2. Bump the version, which commits and tags it (`patch` for fixes, `minor` for new features,
+   `major` for breaking changes), and push:
+
+   ```sh
+   npm version patch
+   git push --follow-tags
+   ```
+
+3. On GitHub, open **Releases → Draft a new release**, choose the new tag (`v0.1.1`), paste the
+   changelog entry and press **Publish release**. The workflow checks that the tag matches
+   `package.json`, runs the full check and publishes.
