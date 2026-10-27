@@ -1,0 +1,70 @@
+/*
+ * Comes before the utilities in dist/style.css, so where both set something (equally specific)
+ * the utility wins.
+ */
+/*
+ * A small reset inside the player only: the page's own rules for buttons, inputs and headings
+ * do not reach in, and the player's utilities (equally specific, and later) win over it.
+ */
+.mp-root,
+.mp-root :where(*, ::before, ::after) {
+  box-sizing: border-box;
+  border: 0 solid;
+  margin: 0;
+  padding: 0;
+}
+.mp-root {
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  font-size: 16px;
+  color-scheme: dark;
+}
+.mp-root :where(button, input, select) {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  letter-spacing: inherit;
+  text-transform: none;
+  appearance: none;
+}
+.mp-root :where(input[type='range']) {
+  appearance: auto;
+}
+.mp-root :where(button:not(:disabled), [role='button']:not(:disabled)) {
+  cursor: pointer;
+}
+.mp-root :where(h1, h2, h3, p) {
+  font-size: inherit;
+  font-weight: inherit;
+}
+.mp-root :where(h1, h2, h3) {
+  font-weight: 600;
+}
+.mp-root :where(img, svg, video, canvas) {
+  display: block;
+  max-width: 100%;
+}
+.mp-root :where(:focus-visible) {
+  outline: 2px solid var(--mp-color-accent);
+  outline-offset: 2px;
+}
+
+/* The player filling the window (full screen where only a bare <video> may go full screen):
+   the page under it holds still. */
+:root[data-mp-fullscreen],
+:root[data-mp-fullscreen] body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mp-root,
+  .mp-root *,
+  .mp-root *::before,
+  .mp-root *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

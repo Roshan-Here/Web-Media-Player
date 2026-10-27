@@ -1,0 +1,101 @@
+{
+  "name": "@roshan-here/web-media-player",
+  "version": "0.1.0",
+  "description": "A complete video player for the web, built for React: plays MKV, HEVC, AC-3, DTS, multiple audio tracks and embedded subtitles in the browser, with timeline previews, chapters, a subtitle look panel, picture in picture, a miniplayer, Skip intro and Up Next.",
+  "keywords": [
+    "react",
+    "video",
+    "player",
+    "video-player",
+    "mkv",
+    "hevc",
+    "subtitles",
+    "chapters",
+    "picture-in-picture",
+    "webassembly",
+    "ffmpeg",
+    "media-player",
+    "web-media-player"
+  ],
+  "author": "Roshan-Here (https://github.com/Roshan-Here)",
+  "license": "MIT",
+  "homepage": "https://github.com/Roshan-Here/Web-Media-Player#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Roshan-Here/Web-Media-Player.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Roshan-Here/Web-Media-Player/issues"
+  },
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./style.css": "./dist/style.css",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && npm run build:css",
+    "build:css": "node scripts/build-css.mjs && node scripts/check-css.mjs",
+    "prefix": "node scripts/prefix-classes.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run typecheck && node scripts/prefix-classes.mjs --check && npm run format:check && npm test && npm run build",
+    "fixtures": "sh scripts/fixtures.sh",
+    "demo": "npm run build:css && vite examples/demo",
+    "demo:build": "npm run build:css && vite build examples/demo",
+    "test:browser": "node scripts/browser-check.mjs",
+    "screenshots": "node scripts/screenshots.mjs",
+    "prepublishOnly": "npm run check"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "web-buildin-decoder": "^0.1.0"
+  },
+  "peerDependencies": {
+    "movi-player": ">=0.4.1 <0.5.0",
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "movi-player": "^0.4.1",
+    "playwright": "^1.56.0",
+    "prettier": "^3.9.10",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.7",
+    "vitest": "^3.2.7"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
