@@ -10,6 +10,7 @@ import {
 } from '@roshan-here/web-media-player'
 import '@roshan-here/web-media-player/style.css'
 import './demo.css'
+import { subtitleService } from './demo-subtitles'
 
 const stillWatching = createStillWatching()
 
@@ -86,6 +87,7 @@ function Demo() {
             source={current.source}
             title={current.title}
             subtitles={custom ? undefined : SUBTITLES}
+            onlineSubtitles={{ service: subtitleService }}
             upNext={upNext}
             accentColor={accent}
             layout={mini ? 'mini' : 'page'}

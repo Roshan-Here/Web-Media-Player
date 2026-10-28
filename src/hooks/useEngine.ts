@@ -124,6 +124,7 @@ export function useEngine({
     let cancelled = false
     let created: MediaEngine | null = null
     let objectUrl: string | null = null
+    let release: (() => void) | null = null
     const unsubscribe: Array<() => void> = []
     setStatus({ kind: 'loading' })
     setPhase('file')
@@ -172,12 +173,20 @@ export function useEngine({
           })
         } else {
           let url = src.url
+          if (src.openUrl) {
+            const made = await src.openUrl()
+            if (made) release = made.release ?? null
+            url = made?.url
+            if (cancelled) return
+            if (!url) throw new EngineUnavailableError('The browser decoder cannot play this here')
+          }
           if (!url && src.file) url = objectUrl = URL.createObjectURL(src.file)
           if (!url) throw new EngineUnavailableError('The browser decoder needs a url or a file')
           setPhase('decoder')
           next = createBrowserEngine({
             host: surface,
             src: url,
+            previewSrc: src.previewUrl,
             key,
             startAt: from,
             crossOrigin: src.http?.credentials === 'include' ? 'use-credentials' : undefined,
@@ -266,6 +275,7 @@ export function useEngine({
       for (const off of unsubscribe) off()
       created?.destroy()
       if (objectUrl) URL.revokeObjectURL(objectUrl)
+      release?.()
     }
   }, [decoder, attempt, key, surfaceRef, report])
 

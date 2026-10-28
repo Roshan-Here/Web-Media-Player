@@ -6,7 +6,8 @@ import { createContext, useContext } from 'react'
 /**
  * Every piece of text the player shows or reads out to screen readers, in English. Pass your own
  * (all or some) through the `labels` prop to translate the player. `{name}` marks a value that is
- * filled in, and stays as it is in a translation.
+ * filled in, and stays as it is in a translation. A label can also be a function of those
+ * values, for languages whose words change with a number: `(v) => plural(v.count, ...)`.
  */
 export const defaultLabels = {
   region: 'Video player: {title}',
@@ -168,16 +169,62 @@ export const defaultLabels = {
   reset: 'Reset',
   timingHint: 'Later when the words come before they are spoken, earlier when they come after.',
   defaultLook: 'Back to the default look',
+  onlineTitle: 'Subtitles online',
+  onlineSearch: 'Search online',
+  onlineSearchDetail: 'Find subtitles for this video online',
+  onlineFound: 'Found online',
+  onlineSearching: 'Searching online…',
+  onlineSlow: 'This is taking longer than usual.',
+  onlineNoneFound: 'No subtitles found online for this video.',
+  onlineDownloading: 'Downloading subtitles…',
+  onlineExactMatch: 'Exact match',
+  onlineHearingImpaired: 'Hearing impaired',
+  onlineMachineTranslated: 'Machine translated',
+  onlineDownloads: '{count} downloads',
+  onlineDownloadsLeft: '{remaining} of {count} downloads left today',
+  unknownLanguage: 'Unknown language',
+  onlineNoticeSignInToDownload:
+    'OpenSubtitles asked for an account for this download. Sign in to download it.',
+  onlineNoticeQuotaUsedUntil:
+    'No downloads left until {time}. Subtitles already downloaded still work.',
+  onlineNoticeQuotaUsed: 'No downloads left today. Subtitles already downloaded still work.',
+  onlineNoticeFreeQuotaUsedUntil:
+    'Downloads without an account are used up until {time}. Sign in to OpenSubtitles for your own daily quota.',
+  onlineNoticeFreeQuotaUsed:
+    "Today's downloads without an account are used up. Sign in to OpenSubtitles for your own daily quota.",
+  onlineNoticeSignInExpired:
+    'Your OpenSubtitles sign-in has expired. Downloads carry on without an account; sign in again for your own daily quota.',
+  onlineNoticeUnavailable:
+    'Online subtitles are unavailable right now. Subtitles already downloaded still work.',
+  onlineNoticeBusy: 'OpenSubtitles is busy. Try again in a minute.',
+  onlineNoticeOffline: "Couldn't reach the subtitle service. Check the connection and try again.",
+  onlineNoticeSubdlKeyRefused: "SubDL didn't accept the key.",
+  onlineNoticeUnreadable: "That subtitle file couldn't be read. Try another one.",
+  onlineStatusSignedOut:
+    'Optional. Subtitles download without an account. Sign in for your own daily quota.',
+  onlineStatusExpired:
+    "{user}'s sign-in has expired. Downloads carry on without an account. Sign in again for your own daily quota.",
+  onlineStatusSignedIn: 'Signed in as {user}.',
+  onlineStatusSignedInLeft: 'Signed in as {user}. {left}.',
+  onlineStatusFreeQuotaUsedUntil:
+    'Not signed in. Downloads without an account are used up until {time}. Sign in for your own daily quota.',
+  onlineStatusFreeQuotaUsed:
+    "Not signed in. Today's downloads without an account are used up. Sign in for your own daily quota.",
 }
 
-export type PlayerLabels = typeof defaultLabels
-export type LabelKey = keyof PlayerLabels
+export type LabelKey = keyof typeof defaultLabels
+/** A label: text with `{placeholders}`, or a function of the values that returns the text. */
+export type LabelValue = string | ((values: Record<string, string | number>) => string)
+export type PlayerLabels = Record<LabelKey, LabelValue>
 
 /** A label with its `{placeholders}` filled in. */
 export type Translate = (key: LabelKey, values?: Record<string, string | number>) => string
 
 export function makeTranslate(labels: PlayerLabels): Translate {
-  return (key, values) => fill(labels[key] ?? defaultLabels[key], values)
+  return (key, values) => {
+    const label = labels[key] ?? defaultLabels[key]
+    return typeof label === 'function' ? label(values ?? {}) : fill(label, values)
+  }
 }
 
 /** Fills `{name}` placeholders; unknown ones are left as they are. */

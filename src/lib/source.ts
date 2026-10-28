@@ -31,8 +31,29 @@ export interface PlayerSource {
   fileName?: string
   /** Request headers and other options for `url`, used by the built-in decoder. */
   http?: Omit<HttpSourceOptions, 'fetch'>
+  /**
+   * Where the browser decoder's timeline previews read the video. They read `url` (or the
+   * file) by default, with a second hidden `<video>`. Give another address when previews should
+   * not share playback's connection (a Service Worker stream with a reader of its own, say), or
+   * `false` for no previews. A function is called on the first preview, so it can set up what
+   * that address serves; `release` is called when the player lets the video go.
+   */
+  previewUrl?: string | false | (() => SourceUrl | null)
+  /**
+   * An address for the browser decoder made when it starts, in place of `url`: a Service
+   * Worker stream over your `open` bytes, say. Called each time the browser decoder starts;
+   * `release` runs when it stops. Null means the browser decoder cannot play it here (service
+   * workers are off), and the built-in one takes over.
+   */
+  openUrl?: () => Promise<SourceUrl | null>
   /** Read failures that will never succeed; playback stops at once on these. */
   isPermanent?: (error: unknown) => boolean
+}
+
+/** What `openUrl` and a `previewUrl` function give: the address, and how to let it go afterwards. */
+export interface SourceUrl {
+  url: string
+  release?: () => void
 }
 
 /** The video's stable id. */
@@ -65,7 +86,7 @@ export function sourceMimeType(source: PlayerSource): string {
 
 /** Whether the browser's own `<video>` should be able to play this, judged before loading. */
 export function browserCanPlaySource(source: PlayerSource): boolean {
-  if (!source.url && !source.file) return false
+  if (!source.url && !source.file && !source.openUrl) return false
   if (typeof document === 'undefined') return false
   const probe = document.createElement('video')
   return (

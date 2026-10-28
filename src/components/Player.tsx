@@ -71,6 +71,9 @@ import { PlayerLoader, loaderStatus, type LoaderInfo } from './PlayerLoader.js'
 import { SeekBar } from './SeekBar.js'
 import { Spinner } from './Spinner.js'
 import { SubtitleStylePanel } from './SubtitleStylePanel.js'
+import { OnlineSubtitlesPanel } from './OnlineSubtitlesPanel.js'
+import { useOnlineSubtitle, type OnlineSubtitlesOptions } from '../hooks/useOnlineSubtitle.js'
+import { withOnlineSubtitles } from '../lib/online-menu.js'
 import { NextCountdown, StillWatching, UpNextCard } from './UpNext.js'
 
 export interface PlayerProps {
@@ -94,6 +97,12 @@ export interface PlayerProps {
   browserCanPlay?: boolean
   /** Subtitle files to offer beside the video's own tracks. */
   subtitles?: readonly SubtitleFile[]
+  /**
+   * Turns on "Search online" in the Subtitles menu: a panel listing what the service has for
+   * the video (`createOnlineSubtitles(...)` for OpenSubtitles and SubDL, or your own), best
+   * first. The chosen one shows in place of the video's own tracks.
+   */
+  onlineSubtitles?: OnlineSubtitlesOptions | null
   /** Chapters for a video that has none of its own (or to replace them). */
   chapters?: readonly ChapterMark[]
   /**
@@ -215,6 +224,7 @@ function PlayerView({
   decoder: initialDecoder,
   browserCanPlay: browserCanPlayProp,
   subtitles: subtitleFiles,
+  onlineSubtitles,
   chapters: givenChapters,
   skipSegments,
   skipButton = true,
@@ -347,8 +357,22 @@ function PlayerView({
     const index = subtitleFiles?.findIndex((f) => f.default) ?? -1
     if (index >= 0 && !subtitles.selected) external.select(index)
   }, [status.kind, key, subtitleFiles, subtitles.selected, external])
-  /** One subtitle shows at a time: a file given to the player in place of the video's own. */
-  const shownCaption = external.selected !== null ? external.caption : caption
+  const online = useOnlineSubtitle({
+    options: onlineSubtitles,
+    media,
+    source,
+    title,
+    delay: subtitleDelay,
+  })
+  /**
+   * One subtitle shows at a time: one found online, or a file given to the player, in place of
+   * the video's own.
+   */
+  const shownCaption = online.attached
+    ? online.caption
+    : external.selected !== null
+      ? external.caption
+      : caption
   const seek = useSeek(media)
   // Timeline previews only once this engine has started playing: the preview decoder is a
   // second FFmpeg and its own reads, and a pointer that happens to rest on the timeline while
@@ -585,9 +609,12 @@ function PlayerView({
     },
     [selectSubtitle, selectExternal, subtitleFiles],
   )
+  const clearOnline = online.clear
+  const onlineOn = online.attached !== null
   const toggleSubtitles = useCallback(() => {
-    if (externalOn || subtitles.selected) {
+    if (onlineOn || externalOn || subtitles.selected) {
       // Off means off: whatever shows goes.
+      clearOnline()
       selectExternal(null)
       selectSubtitle(null)
     } else {
@@ -597,7 +624,16 @@ function PlayerView({
         (subtitleFiles && subtitleFiles.length > 0 ? externalId(0) : null)
       if (first) chooseSubtitle(first)
     }
-  }, [subtitles, selectSubtitle, selectExternal, externalOn, subtitleFiles, chooseSubtitle])
+  }, [
+    subtitles,
+    selectSubtitle,
+    selectExternal,
+    externalOn,
+    onlineOn,
+    clearOnline,
+    subtitleFiles,
+    chooseSubtitle,
+  ])
 
   const switchDecoder = useCallback(
     (next: EngineKind) => {
@@ -915,11 +951,12 @@ function PlayerView({
         ]
 
   const subtitleSections: MenuSection[] = [
-    // Any other choice in the menu puts the look panel away.
-    ...fileSubtitleSections.map((section) => ({
+    // Any other choice in the menu puts the open panel away.
+    ...withOnlineSubtitles(fileSubtitleSections, online, t).map((section) => ({
       ...section,
       onSelect: (value: string) => {
         setStylePanelOpen(false)
+        if (value !== 'online:search') online.closePanel()
         section.onSelect(value)
       },
     })),
@@ -934,7 +971,10 @@ function PlayerView({
         },
       ],
       selected: null,
-      onSelect: () => setStylePanelOpen(true),
+      onSelect: () => {
+        online.closePanel()
+        setStylePanelOpen(true)
+      },
     },
   ]
 
@@ -945,7 +985,13 @@ function PlayerView({
     phase === 'started' || status.kind === 'failed' || (ready && !state.paused && !state.waiting)
   const preRoll = !mini && loader != null && !loaderGone
   const controlsVisible =
-    !ready || active || state.paused || menuOpen || scrubbing || stylePanelOpen
+    !ready ||
+    active ||
+    state.paused ||
+    menuOpen ||
+    scrubbing ||
+    stylePanelOpen ||
+    (online.panelOpen && !mini)
   const selectableSubtitles = subtitles.options.filter((o) => o.selectable)
   const otherDecoder: EngineKind = decoder === 'builtin' ? 'browser' : 'builtin'
   const canSwitch = otherDecoder === 'builtin' || browserCanPlay
@@ -1355,7 +1401,11 @@ function PlayerView({
                 sections={subtitleSections}
                 trigger={({ toggle, ariaProps }) => (
                   <ControlButton
-                    on={subtitles.selected !== null || external.selected !== null}
+                    on={
+                      subtitles.selected !== null ||
+                      external.selected !== null ||
+                      online.attached !== null
+                    }
                     onClick={toggle}
                     disabled={!ready}
                     aria-label={
@@ -1496,6 +1546,16 @@ function PlayerView({
             delay={subtitleDelay}
             onDelay={setSubtitleDelay}
             onClose={() => setStylePanelOpen(false)}
+          />
+        ) : null}
+
+        {online.panelOpen && !mini && onlineSubtitles ? (
+          <OnlineSubtitlesPanel
+            service={onlineSubtitles.service}
+            target={online.target}
+            onLoaded={online.attach}
+            onClose={online.closePanel}
+            locale={onlineSubtitles.locale}
           />
         ) : null}
 

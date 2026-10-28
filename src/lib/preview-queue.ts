@@ -8,6 +8,9 @@ export interface PreviewQueueOptions {
   step: number
   /** Stills kept for going back over the same stretch. */
   cacheSize?: number
+  /** How long a slot that could not be made is left alone before it is tried again. */
+  retryAfterMs?: number
+  now?: () => number
   /** Called with a still to show: the one asked for, or the closest made so far. */
   onImage: (url: string) => void
   createUrl?: (blob: Blob) => string
@@ -19,7 +22,8 @@ export interface PreviewQueueOptions {
  * decode, so only one is made at a time and, when it is done, the next is for wherever the
  * pointer is by then: a fast sweep across the bar makes a handful of frames, not one per
  * pixel. Stills are kept per slot of timeline, so going back over a stretch is instant, and a
- * slot that could not be made is not asked for again.
+ * slot that could not be made is left alone for a while (a read can fail on a bad moment of the
+ * network) rather than for good.
  */
 export class PreviewQueue {
   private readonly source: PreviewSource
@@ -28,9 +32,12 @@ export class PreviewQueue {
   private readonly onImage: (url: string) => void
   private readonly createUrl: (blob: Blob) => string
   private readonly revokeUrl: (url: string) => void
+  private readonly retryAfterMs: number
+  private readonly now: () => number
 
   private readonly cache = new Map<number, string>()
-  private readonly failed = new Set<number>()
+  /** Slots that could not be made, with when. */
+  private readonly failed = new Map<number, number>()
   private wanted: number | null = null
   private busy = false
   private disposed = false
@@ -42,6 +49,8 @@ export class PreviewQueue {
     this.onImage = options.onImage
     this.createUrl = options.createUrl ?? ((blob) => URL.createObjectURL(blob))
     this.revokeUrl = options.revokeUrl ?? ((url) => URL.revokeObjectURL(url))
+    this.retryAfterMs = options.retryAfterMs ?? 10_000
+    this.now = options.now ?? (() => Date.now())
   }
 
   prepare(): void {
@@ -73,7 +82,8 @@ export class PreviewQueue {
         this.onImage(hit)
         return
       }
-      if (this.failed.has(target)) return
+      const failedAt = this.failed.get(target)
+      if (failedAt !== undefined && this.now() - failedAt < this.retryAfterMs) return
 
       this.busy = true
       let blob: Blob | null
@@ -96,7 +106,8 @@ export class PreviewQueue {
         }
         // Shown even when the pointer has moved on: a nearby frame beats an empty card.
         if (this.wanted !== null) this.onImage(url)
-      } else this.failed.add(target)
+        this.failed.delete(target)
+      } else this.failed.set(target, this.now())
 
       // Loop on only when the pointer is somewhere else by now.
       if (this.wanted === null || this.slot(this.wanted) === target) return

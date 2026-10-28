@@ -63,14 +63,28 @@ describe('PreviewQueue', () => {
     expect(shown).toEqual(['blob:1', 'blob:1'])
   })
 
-  it('does not ask again for a slot that could not be made', async () => {
+  it('leaves a slot that could not be made alone for a while, then tries it again', async () => {
     const { source, finish } = controlledSource()
-    const { queue, shown } = queueFor(source)
+    let now = 0
+    const shown: string[] = []
+    const queue = new PreviewQueue(source, {
+      step: 10,
+      onImage: (url) => shown.push(url),
+      createUrl: () => 'blob:1',
+      revokeUrl: () => undefined,
+      retryAfterMs: 5000,
+      now: () => now,
+    })
     queue.want(3)
     await finish(null)
     queue.want(4)
     expect(source.frame).toHaveBeenCalledTimes(1)
     expect(shown).toEqual([])
+    now = 6000
+    queue.want(5)
+    expect(source.frame).toHaveBeenCalledTimes(2)
+    await finish()
+    expect(shown).toEqual(['blob:1'])
   })
 
   it('stops when the pointer leaves', async () => {

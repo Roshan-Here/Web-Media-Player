@@ -104,6 +104,46 @@ try {
   await page.keyboard.press('l')
   check(await at(before + 9, 20_000), 'L goes forward 10 seconds')
 
+  // Search online, through the demo's stand-in service.
+  await wake()
+  await page.getByRole('button', { name: 'Subtitles', exact: true }).click()
+  await page.locator('[role^="menuitem"]', { hasText: 'Search online' }).click()
+  const listed = await settle(
+    page.waitForSelector('[data-online-subtitles] li button', { timeout: 10_000 }),
+  )
+  check(listed, 'Search online lists what the service found')
+  await page
+    .locator('[data-online-subtitles] li button', { hasText: 'Northern.Lights.2026.Spanish' })
+    .click()
+  const closed = await settle(
+    page.waitForSelector('[data-online-subtitles]', { state: 'detached', timeout: 10_000 }),
+  )
+  await page.evaluate(() => window.player.current.seekTo(41))
+  const spanish = await settle(
+    page.waitForFunction(
+      () => document.querySelector('[data-player-caption]')?.textContent?.includes('valle.'),
+      null,
+      { timeout: 20_000 },
+    ),
+  )
+  check(closed && spanish, 'shows the subtitle chosen online')
+  await wake()
+  await page.getByRole('button', { name: 'Subtitles', exact: true }).click()
+  const checked = await page.locator('[role="menuitemradio"][aria-checked="true"]').allInnerTexts()
+  check(
+    checked.some((s) => s.includes('ES · Demo')),
+    'checks the online subtitle in the menu',
+  )
+  await page.getByRole('menuitemradio', { name: /^Français/ }).click()
+  const swapped = await settle(
+    page.waitForFunction(
+      () => document.querySelector('[data-player-caption]')?.textContent?.includes('vallée'),
+      null,
+      { timeout: 20_000 },
+    ),
+  )
+  check(swapped, 'a track chosen instead puts the online subtitle away')
+
   // The page's CSS stays out.
   const button = page.getByRole('button', { name: 'Audio track', exact: true })
   const padding = await button.evaluate((el) => getComputedStyle(el).paddingTop)

@@ -1,0 +1,138 @@
+name: Update the decoder
+
+# Keeps the player on the newest Web-Buildin-decoder: moves to it, runs the full check and the
+# browser check, opens a pull request and merges it when they pass. A failure leaves the pull
+# request open, with a comment linking the run. Publishing a player release stays a person's
+# call; when the decoder's minor version changed, the next player release is what lets apps
+# built on both (TMPlayer-web) take the new decoder too.
+#
+# Runs when the decoder publishes a release (its release workflow sends `decoder-released`),
+# every Monday in case that message never came, and from the Actions tab ("Run workflow").
+#
+# Needs, once, in this repository's Settings → Actions → General: "Read and write permissions"
+# and "Allow GitHub Actions to create and approve pull requests".
+on:
+  repository_dispatch:
+    types: [decoder-released]
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-decoder
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Update, check and merge
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # A release sends its message the moment it publishes; npm can take a minute to show it.
+      - name: Wait for the release to reach npm
+        if: github.event_name == 'repository_dispatch'
+        env:
+          VERSION: ${{ github.event.client_payload.version }}
+        run: |
+          for attempt in $(seq 1 30); do
+            npm view "web-buildin-decoder@$VERSION" version > /dev/null 2>&1 && exit 0
+            sleep 10
+          done
+          echo "::warning::web-buildin-decoder $VERSION is not on npm yet; updating to what is there."
+
+      - name: Move to the newest decoder
+        id: bump
+        run: |
+          latest="$(npm view web-buildin-decoder version)"
+          npm install "web-buildin-decoder@^$latest" --no-audit --no-fund
+          echo "version=$latest" >> "$GITHUB_OUTPUT"
+          if git diff --quiet; then
+            echo "Already on web-buildin-decoder $latest." >> "$GITHUB_STEP_SUMMARY"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open the pull request
+        if: steps.bump.outputs.changed == 'true'
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.bump.outputs.version }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          branch="deps/web-buildin-decoder"
+          title="Web-Buildin-decoder $VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "chore(deps): $title"
+          git push --force origin "$branch"
+          body="$(cat <<EOF
+          Moves the player to [web-buildin-decoder $VERSION](https://github.com/Roshan-Here/Web-Buildin-decoder/releases/tag/v$VERSION).
+
+          [This run]($RUN) runs the full check and the browser check, and merges this when they pass. Publish a player release afterwards when apps built on both should take the new decoder.
+          EOF
+          )"
+          if [ -z "$(gh pr list --head "$branch" --json number --jq '.[0].number')" ]; then
+            gh pr create --head "$branch" --title "$title" --body "$body"
+          else
+            gh pr edit "$branch" --title "$title" --body "$body"
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Types, tests and build
+        if: steps.bump.outputs.changed == 'true'
+        run: npm run check
+
+      # The same browser check as CI, on the same cached test videos and Chromium.
+      - name: Restore the test videos
+        if: steps.bump.outputs.changed == 'true'
+        id: media
+        uses: actions/cache@v4
+        with:
+          path: examples/demo/public/media
+          key: media-${{ hashFiles('scripts/fixtures.sh') }}
+      - name: Make the test videos
+        if: steps.bump.outputs.changed == 'true' && steps.media.outputs.cache-hit != 'true'
+        env:
+          SIZE: 640x360
+          PRESET: ultrafast
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-inter
+          npm run fixtures
+      - name: Install Chromium
+        if: steps.bump.outputs.changed == 'true'
+        run: npx playwright install --with-deps --only-shell chromium
+      - name: Plays in Chromium
+        if: steps.bump.outputs.changed == 'true'
+        run: npm run test:browser
+
+      - name: Merge it
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
+        run: |
+          gh pr merge "$BRANCH" --squash --delete-branch --auto || gh pr merge "$BRANCH" --squash --delete-branch
+          echo "Merged $BRANCH." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Say what failed
+        if: failure() && steps.pr.outputs.branch != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh pr comment "$BRANCH" --body "Not merged: a check failed in [this run]($RUN). The update waits here for a look."

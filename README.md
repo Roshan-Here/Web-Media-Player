@@ -45,6 +45,9 @@ Created by **[Roshan-Here](https://github.com/Roshan-Here)**.
 - **A timeline that helps.** Chapters as segments, a preview of the scene under the pointer,
   the chapter's name over the time, and seeking that merges a burst of clicks or key presses
   into one seek.
+- **Subtitles from the web.** "Search online" in the Subtitles menu finds subtitles on
+  OpenSubtitles (and SubDL, with the viewer's own key), best match first by file hash, show and
+  episode, and keeps them in the browser. Or plug in your own source.
 - **Subtitles your way.** Size, colour, background box, edge, position and typeface, plus
   timing per video, all remembered.
 - **Streaming-app touches.** "Skip intro" (and recap, opening, credits), an Up Next card and
@@ -129,6 +132,27 @@ remembers the viewer's volume and choices. Using Vite? Add one line to its confi
 and size are used when it is absent. `fileName` and `mimeType` help pick the decoder when the
 URL has no extension.
 
+Your own bytes can reach the browser decoder too: `openUrl` is called each time it starts and
+returns an address made for them (a Service Worker stream over `open`, say), with a `release`
+for when it stops. Returning null hands the video to the built-in decoder.
+
+The browser decoder's timeline previews play the same address in a second, hidden `<video>`.
+Give `previewUrl` when they should read elsewhere: a function is called on the first preview,
+so it can set up what that address serves (a Service Worker stream with a reader of its own,
+say), and its `release` runs when the player lets the video go. `false` turns them off.
+
+```tsx
+<Player
+  source={{
+    url: streamUrl(id),
+    previewUrl: () => ({
+      url: streamUrl(`${id}~preview`),
+      release: () => stopStream(`${id}~preview`),
+    }),
+  }}
+/>
+```
+
 ### Subtitle files
 
 ```tsx
@@ -145,6 +169,72 @@ URL has no extension.
 SRT, WebVTT, ASS and SSA are read; the format comes from the name or the text. Files load when
 chosen. They sit in the Subtitles menu with the video's own tracks, and follow the same look
 and timing.
+
+### Subtitles from the web
+
+Give the player a subtitle service and the Subtitles menu gains "Search online": a panel
+listing what the service has for the video, best first. The one chosen shows in place of the
+video's own tracks, with the same look and timing, and the next episode of the same show
+searches in its language first.
+
+```tsx
+import { createOnlineSubtitles, Player } from '@roshan-here/web-media-player'
+
+// Once, at start up. The key is your app's, from opensubtitles.com (API consumers).
+const subtitles = createOnlineSubtitles({
+  apiKey: import.meta.env.VITE_OPENSUBTITLES_KEY,
+  appName: 'My Player',
+  appVersion: '1.0',
+})
+
+<Player source={source} title={title} onlineSubtitles={{ service: subtitles }} />
+```
+
+What it searches for comes from the video: the file's name (or `onlineSubtitles.name`), any
+`caption` text posted with it for a show, season and episode a file name lacks, and the
+OpenSubtitles hash of the file's two ends, read without disturbing playback, for an exact
+match. Pass `languages` (best first) to choose the languages; otherwise it is the one last
+chosen for that show, the browser's, then English.
+
+OpenSubtitles allows a few downloads a day without an account. A settings page can sign the
+viewer in for their own quota, and add a SubDL key as a second source, with the same service:
+
+```tsx
+const status = subtitles.status() // { kind: 'signedIn', username, remaining, allowed }, ...
+await subtitles.signIn(username, password) // { kind: 'ok' } | { kind: 'wrongPassword' } | ...
+subtitles.signOut()
+subtitles.setSubdlKey(key)
+const line = statusText({ t: makeTranslate(defaultLabels) }, status) // "Signed in as ..."
+```
+
+The account and quota figures are kept in `localStorage`, and searches and files in IndexedDB
+for up to six months, so the same subtitle never costs a second download. `accountKey` and
+`cacheName` choose where.
+
+**Your own source.** Anything with these four methods works, from your own server to a folder
+of files:
+
+```ts
+const mine: OnlineSubtitleService = {
+  search: async (target) => ({
+    hits: await findFor(target.name, target.languages),
+    notice: null,
+    fromCache: false,
+  }),
+  download: async (hit) => ({
+    kind: 'done',
+    subtitle: { extension: 'srt', text: await fetchText(hit.id) },
+    label: hit.language,
+    fromCache: false,
+  }),
+  cachedIds: async () => new Set(),
+  blockedFor: () => null,
+}
+```
+
+`makeHit({ provider: 'Mine', id, language, release })` fills in the rest of a hit. The panel's
+words are labels like the rest (`onlineTitle`, `onlineNotice...`), and a label may be a
+function for languages whose plurals need one.
 
 ### Chapters, Skip intro and Up Next
 
@@ -284,7 +374,12 @@ English. `{name}` is filled in.
 />
 ```
 
-`defaultLabels` (exported) lists all of them.
+`defaultLabels` (exported) lists all of them. A label can also be a function of its values,
+for plurals and word order a template cannot express:
+
+```tsx
+labels={{ onlineDownloads: ({ count }) => (count === 1 ? '1 téléchargement' : `${count} téléchargements`) }}
+```
 
 ### Controlling it from code
 
@@ -337,40 +432,46 @@ function SubtitleSettings() {
 }
 ```
 
+Outside a player, wrap them in `<LabelsProvider labels={...}>` to give them your translation, as
+the player's `labels` prop does inside it. The pre-roll, `PlayerLoader` (with `loaderStatus` for
+its status line), can be shown the same way on a placeholder before the player itself arrives,
+so nothing jumps when it does.
+
 ## Props
 
-| Prop                 | Type                             | Default                | What it does                                                                       |
-| -------------------- | -------------------------------- | ---------------------- | ---------------------------------------------------------------------------------- |
-| `source`             | `PlayerSource`                   | required               | `url`, `file` or `open`, with `key`, `fileName`, `mimeType`, `http`, `isPermanent` |
-| `title`              | `string`                         | `''`                   | For screen readers, full screen, picture in picture, media controls                |
-| `poster`             | `string`                         |                        | Shown dimmed while the video opens; artwork for media controls                     |
-| `startAt`            | `number`                         | `0`                    | Seconds to start from                                                              |
-| `autoPlay`           | `boolean`                        | `true`                 | Start as soon as it can (muted if sound is refused)                                |
-| `decoder`            | `'builtin' \| 'browser'`         | remembered             | The decoder to start with                                                          |
-| `browserCanPlay`     | `boolean`                        | detected               | Whether to offer the browser decoder                                               |
-| `subtitles`          | `SubtitleFile[]`                 |                        | Subtitle files to offer                                                            |
-| `chapters`           | `ChapterMark[]`                  | the file's             | Chapters to use instead of the file's own                                          |
-| `skipSegments`       | `SkipSegment[]`                  | from chapters          | Stretches to offer "Skip" for                                                      |
-| `skipButton`         | `boolean`                        | `true`                 | Show the Skip button                                                               |
-| `upNext`             | `UpNext`                         |                        | The next episode                                                                   |
-| `autoplayNext`       | `boolean`                        | `true`                 | Offer and play `upNext` by itself                                                  |
-| `loader`             | `LoaderInfo`                     |                        | The pre-roll                                                                       |
-| `layout`             | `'page' \| 'mini'`               | `'page'`               | Full player or miniplayer                                                          |
-| `onToggleMiniplayer` | `() => void`                     |                        | Shows the miniplayer button; switches layout                                       |
-| `onClose`            | `() => void`                     |                        | Mini layout: the close button                                                      |
-| `renderMiniBar`      | `(controls) => ReactNode`        |                        | Mini layout: a bar under the picture                                               |
-| `fit`                | `'aspect' \| 'fill'`             | `'aspect'`             | 16:9 box, or fill the parent                                                       |
-| `keyboard`           | `'focused' \| 'global' \| 'off'` | `'focused'`            | Where shortcuts work                                                               |
-| `rememberSettings`   | `boolean`                        | `true`                 | Remember timing and track languages                                                |
-| `labels`             | `Partial<PlayerLabels>`          | English                | Text, for translation                                                              |
-| `accentColor`        | `string`                         | `#f2b33d`              | The accent colour                                                                  |
-| `wasmUrl`            | `string`                         | emitted by the bundler | Where `movi.wasm` is served                                                        |
-| `onProgress`         | `(position, duration) => void`   |                        | Every few seconds, and on pause                                                    |
-| `onEnded`            | `() => void`                     |                        | The video played to its end                                                        |
-| `onError`            | `(failure) => void`              |                        | Playback failed for good                                                           |
-| `onEngine`           | `(engine) => void`               |                        | The engine playing, for advanced use                                               |
-| `className`, `style` |                                  |                        | On the player's root                                                               |
-| `ref`                | `PlayerHandle`                   |                        | `media`, `engine`, `play`, `pause`, `seekTo`, `toggleFullscreen`, `diagnostics`    |
+| Prop                 | Type                             | Default                | What it does                                                                        |
+| -------------------- | -------------------------------- | ---------------------- | ----------------------------------------------------------------------------------- |
+| `source`             | `PlayerSource`                   | required               | `url`, `file` or `open`, with `key`, `fileName`, `mimeType`, `http`, `isPermanent`  |
+| `title`              | `string`                         | `''`                   | For screen readers, full screen, picture in picture, media controls                 |
+| `poster`             | `string`                         |                        | Shown dimmed while the video opens; artwork for media controls                      |
+| `startAt`            | `number`                         | `0`                    | Seconds to start from                                                               |
+| `autoPlay`           | `boolean`                        | `true`                 | Start as soon as it can (muted if sound is refused)                                 |
+| `decoder`            | `'builtin' \| 'browser'`         | remembered             | The decoder to start with                                                           |
+| `browserCanPlay`     | `boolean`                        | detected               | Whether to offer the browser decoder                                                |
+| `subtitles`          | `SubtitleFile[]`                 |                        | Subtitle files to offer                                                             |
+| `onlineSubtitles`    | `OnlineSubtitlesOptions`         |                        | "Search online": `service`, and optionally `name`, `caption`, `languages`, `locale` |
+| `chapters`           | `ChapterMark[]`                  | the file's             | Chapters to use instead of the file's own                                           |
+| `skipSegments`       | `SkipSegment[]`                  | from chapters          | Stretches to offer "Skip" for                                                       |
+| `skipButton`         | `boolean`                        | `true`                 | Show the Skip button                                                                |
+| `upNext`             | `UpNext`                         |                        | The next episode                                                                    |
+| `autoplayNext`       | `boolean`                        | `true`                 | Offer and play `upNext` by itself                                                   |
+| `loader`             | `LoaderInfo`                     |                        | The pre-roll                                                                        |
+| `layout`             | `'page' \| 'mini'`               | `'page'`               | Full player or miniplayer                                                           |
+| `onToggleMiniplayer` | `() => void`                     |                        | Shows the miniplayer button; switches layout                                        |
+| `onClose`            | `() => void`                     |                        | Mini layout: the close button                                                       |
+| `renderMiniBar`      | `(controls) => ReactNode`        |                        | Mini layout: a bar under the picture                                                |
+| `fit`                | `'aspect' \| 'fill'`             | `'aspect'`             | 16:9 box, or fill the parent                                                        |
+| `keyboard`           | `'focused' \| 'global' \| 'off'` | `'focused'`            | Where shortcuts work                                                                |
+| `rememberSettings`   | `boolean`                        | `true`                 | Remember timing and track languages                                                 |
+| `labels`             | `Partial<PlayerLabels>`          | English                | Text, for translation                                                               |
+| `accentColor`        | `string`                         | `#f2b33d`              | The accent colour                                                                   |
+| `wasmUrl`            | `string`                         | emitted by the bundler | Where `movi.wasm` is served                                                         |
+| `onProgress`         | `(position, duration) => void`   |                        | Every few seconds, and on pause                                                     |
+| `onEnded`            | `() => void`                     |                        | The video played to its end                                                         |
+| `onError`            | `(failure) => void`              |                        | Playback failed for good                                                            |
+| `onEngine`           | `(engine) => void`               |                        | The engine playing, for advanced use                                                |
+| `className`, `style` |                                  |                        | On the player's root                                                                |
+| `ref`                | `PlayerHandle`                   |                        | `media`, `engine`, `play`, `pause`, `seekTo`, `toggleFullscreen`, `diagnostics`     |
 
 ## Keyboard shortcuts
 

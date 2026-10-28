@@ -10,7 +10,7 @@ import {
   type TrackList,
 } from './engine.js'
 import type { Translate } from './labels.js'
-import { createVideoPreviews } from './video-previews.js'
+import { createVideoPreviews, type VideoPreviewOptions } from './video-previews.js'
 
 export interface BrowserEngineOptions {
   host: HTMLElement
@@ -19,6 +19,8 @@ export interface BrowserEngineOptions {
   key: string
   /** Seconds to open at. */
   startAt?: number
+  /** What timeline previews read: `src` when absent, none when false. */
+  previewSrc?: VideoPreviewOptions['src'] | false
   /** Send cookies with a cross-origin `src`. */
   crossOrigin?: '' | 'anonymous' | 'use-credentials'
   t: Translate
@@ -82,7 +84,13 @@ export function createBrowserEngine(options: BrowserEngineOptions): MediaEngine 
   video.src = options.src
   logPlayer('browser: loading', { key: options.key })
 
-  const previews = createVideoPreviews({ src: options.src, crossOrigin: options.crossOrigin })
+  const previews =
+    options.previewSrc === false
+      ? null
+      : createVideoPreviews({
+          src: options.previewSrc ?? options.src,
+          crossOrigin: options.crossOrigin,
+        })
 
   return {
     kind: 'browser',
@@ -141,7 +149,7 @@ export function createBrowserEngine(options: BrowserEngineOptions): MediaEngine 
     keepPictureAlive: () => () => undefined,
     previews,
     destroy() {
-      previews.destroy()
+      previews?.destroy()
       video.removeEventListener('error', onError)
       video.removeEventListener('loadedmetadata', onMetadata)
       audio?.removeEventListener('change', onTrackList)

@@ -22,11 +22,11 @@ And to run the browser checks headless (once, `npx playwright install chromium`)
 npm run test:browser
 ```
 
-### Before Web-Buildin-decoder is on npm
+### Working on the decoder at the same time
 
 The player depends on [Web-Buildin-decoder](https://github.com/Roshan-Here/Web-Buildin-decoder).
-Until it is published, install it from a copy next to this one (and keep that change out of
-commits):
+To try a change in it before it is released, install it from a copy next to this one (and keep
+that change out of commits):
 
 ```sh
 (cd ../Web-Buildin-decoder && npm install && npm run build)
@@ -77,3 +77,21 @@ Release is published, through npm trusted publishing: no npm token is stored any
 3. On GitHub, open **Releases → Draft a new release**, choose the new tag (`v0.1.1`), paste the
    changelog entry and press **Publish release**. The workflow checks that the tag matches
    `package.json`, runs the full check and publishes.
+
+### Telling the projects built on it
+
+After publishing, the release workflow tells the projects built on this package that a new
+version is out, and each opens its own update: TMPlayer-web moves to it (its "Update player
+libraries" workflow). They also look once a day on their own, so this only makes it immediate.
+It needs one secret here, under **Settings → Secrets and variables → Actions**:
+`DISPATCH_TOKEN`, a fine-grained personal access token with **Contents: read and write** on
+Roshan-Here/Tmplayer-web. Without it the step only notes that no one was told.
+
+### New decoder releases
+
+`.github/workflows/update-decoder.yml` moves the player to each new Web-Buildin-decoder release:
+it opens a pull request, runs the full check and the browser check, and merges it when they
+pass. Publishing a player release afterwards is still a person's call; when the decoder's minor
+version changed (0.2 to 0.3), that release is what lets apps using both take the new decoder.
+It needs, once, under **Settings → Actions → General**: "Read and write permissions" and "Allow
+GitHub Actions to create and approve pull requests".
