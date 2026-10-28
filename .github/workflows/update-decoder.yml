@@ -1,10 +1,13 @@
 name: Update the decoder
 
-# Keeps the player on the newest Web-Buildin-decoder: moves to it, runs the full check and the
-# browser check, opens a pull request and merges it when they pass. A failure leaves the pull
-# request open, with a comment linking the run. Publishing a player release stays a person's
-# call; when the decoder's minor version changed, the next player release is what lets apps
-# built on both (TMPlayer-web) take the new decoder too.
+# Keeps the player on the newest Web-Buildin-decoder: moves to it, opens a pull request, runs
+# the full check and the browser check, and merges it when they pass. A failure leaves the pull
+# request open, with a comment linking the run.
+#
+# A decoder the player's range already accepts (0.2.0 to 0.2.1) needs only the lockfile, since
+# apps get it through the range. One outside it (0.2 to 0.3) needs a player release before apps
+# built on both (TMPlayer-web) can take it, so the update also moves the player's version on a
+# patch, with a CHANGELOG entry, and starts the Release workflow once it is merged.
 #
 # Runs when the decoder publishes a release (its release workflow sends `decoder-released`),
 # every Monday in case that message never came, and from the Actions tab ("Run workflow").
@@ -21,6 +24,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # Starting the Release workflow after a merge that needs a player release.
+  actions: write
 
 concurrency:
   group: update-decoder
@@ -54,14 +59,43 @@ jobs:
         id: bump
         run: |
           latest="$(npm view web-buildin-decoder version)"
+          range="$(node -p "require('./package.json').dependencies['web-buildin-decoder']")"
+          # Whether the range the player is published with already takes the new decoder.
+          if npm view "web-buildin-decoder@$range" version --json | grep -q "\"$latest\""; then
+            accepted=true
+          else
+            accepted=false
+          fi
           npm install "web-buildin-decoder@^$latest" --no-audit --no-fund
           echo "version=$latest" >> "$GITHUB_OUTPUT"
           if git diff --quiet; then
             echo "Already on web-buildin-decoder $latest." >> "$GITHUB_STEP_SUMMARY"
             echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          if [ "$accepted" = true ]; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A player release, so apps can take the new decoder: the next patch, with its entry.
+          next="$(npm version patch --no-git-tag-version | sed 's/^v//')"
+          DECODER="$latest" NEXT="$next" node -e '
+            const fs = require("fs")
+            const { DECODER, NEXT, GITHUB_REPOSITORY } = process.env
+            let text = fs.readFileSync("CHANGELOG.md", "utf8")
+            const day = new Date().toISOString().slice(0, 10)
+            const entry = `## [${NEXT}] - ${day}\n\n### Changed\n\n- Works with Web-Buildin-decoder ${DECODER}.\n\n`
+            const at = text.indexOf("\n## [") + 1
+            text = text.slice(0, at) + entry + text.slice(at)
+            const link = `[${NEXT}]: https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${NEXT}\n`
+            const refs = text.search(/^\[[^\]]+\]: /m)
+            text = refs < 0 ? text + "\n" + link : text.slice(0, refs) + link + text.slice(refs)
+            fs.writeFileSync("CHANGELOG.md", text)
+          '
+          npx prettier --write CHANGELOG.md
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "player=$next" >> "$GITHUB_OUTPUT"
 
       - name: Open the pull request
         if: steps.bump.outputs.changed == 'true'
@@ -69,10 +103,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.bump.outputs.version }}
+          PLAYER: ${{ steps.bump.outputs.player }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           branch="deps/web-buildin-decoder"
           title="Web-Buildin-decoder $VERSION"
+          if [ -n "$PLAYER" ]; then title="$title, and release $PLAYER"; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
@@ -81,7 +117,7 @@ jobs:
           body="$(cat <<EOF
           Moves the player to [web-buildin-decoder $VERSION](https://github.com/Roshan-Here/Web-Buildin-decoder/releases/tag/v$VERSION).
 
-          [This run]($RUN) runs the full check and the browser check, and merges this when they pass. Publish a player release afterwards when apps built on both should take the new decoder.
+          [This run]($RUN) runs the full check and the browser check, and merges this when they pass.${PLAYER:+ The new decoder is outside the range the player was published with, so this also releases the player as $PLAYER once merged.}
           EOF
           )"
           if [ -z "$(gh pr list --head "$branch" --json number --jq '.[0].number')" ]; then
@@ -127,6 +163,23 @@ jobs:
         run: |
           gh pr merge "$BRANCH" --squash --delete-branch --auto || gh pr merge "$BRANCH" --squash --delete-branch
           echo "Merged $BRANCH." >> "$GITHUB_STEP_SUMMARY"
+
+      # A merge made by this workflow's own token starts no other workflow (CI, and so Release,
+      # would not run), so the release it needs is started here, on the merged commit.
+      - name: Release the player
+        if: steps.bump.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
+          PLAYER: ${{ steps.bump.outputs.player }}
+        run: |
+          state="$(gh pr view "$BRANCH" --json state --jq .state)"
+          if [ "$state" != "MERGED" ]; then
+            echo "::warning::Not merged yet (branch protection waits for its own checks): start Release from the Actions tab once it is."
+            exit 0
+          fi
+          gh workflow run release.yml --ref "$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"
+          echo "Started the release of $PLAYER." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Say what failed
         if: failure() && steps.pr.outputs.branch != ''

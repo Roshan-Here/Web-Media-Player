@@ -62,21 +62,31 @@ ideal), and the diagnostics the error panel's **Copy details** button copies (or
 
 ## Releasing
 
-Releases are published to npm by GitHub Actions (`.github/workflows/release.yml`) when a GitHub
-Release is published, through npm trusted publishing: no npm token is stored anywhere.
+Releasing is a version bump pushed to `master`; GitHub Actions does the rest. When CI passes on
+a push and `package.json` holds a version that is not on npm yet, `.github/workflows/release.yml`
+publishes it (npm trusted publishing: no npm token is stored anywhere, and npm adds a provenance
+statement), tags the commit `v<version>`, and makes the GitHub Release from that version's
+`CHANGELOG.md` entry. A push that leaves the version alone publishes nothing.
 
-1. Add the changes under a new version heading in `CHANGELOG.md`.
-2. Bump the version, which commits and tags it (`patch` for fixes, `minor` for new features,
-   `major` for breaking changes), and push:
+1. Add the changes under a new version heading in `CHANGELOG.md` (`## [0.2.1] - date`, and its
+   link at the bottom).
+2. Bump the version without a local tag (the workflow makes the tag; `patch` for fixes,
+   `minor` for new features, `major` for breaking changes), commit and push:
 
    ```sh
-   npm version patch
-   git push --follow-tags
+   npm version patch --no-git-tag-version
+   git commit -am "Release 0.2.1"
+   git push
    ```
 
-3. On GitHub, open **Releases → Draft a new release**, choose the new tag (`v0.1.1`), paste the
-   changelog entry and press **Publish release**. The workflow checks that the tag matches
-   `package.json`, runs the full check and publishes.
+3. Watch **Actions**: CI runs, then Release publishes. To retry a failed release, open
+   **Actions → Release → Run workflow**.
+
+Don't publish from your own computer: the version would be on npm without its tag, GitHub
+Release or the message to the projects built on it, and the workflow would then skip it.
+
+One-time setup on npmjs.com, already done: the package's **Settings → Trusted publishing**
+names this repository and the workflow file `release.yml`.
 
 ### Telling the projects built on it
 
@@ -91,7 +101,9 @@ Roshan-Here/Tmplayer-web. Without it the step only notes that no one was told.
 
 `.github/workflows/update-decoder.yml` moves the player to each new Web-Buildin-decoder release:
 it opens a pull request, runs the full check and the browser check, and merges it when they
-pass. Publishing a player release afterwards is still a person's call; when the decoder's minor
-version changed (0.2 to 0.3), that release is what lets apps using both take the new decoder.
-It needs, once, under **Settings → Actions → General**: "Read and write permissions" and "Allow
-GitHub Actions to create and approve pull requests".
+pass. A decoder the player's range already accepts (0.2.0 to 0.2.1) changes only the lockfile,
+since apps get it through the range. One outside it (0.2 to 0.3) needs a player release before
+apps using both can take it, so the update also bumps the player's patch version with a
+CHANGELOG entry and starts Release once it is merged. It needs, once, under **Settings →
+Actions → General**: "Read and write permissions" and "Allow GitHub Actions to create and
+approve pull requests".
