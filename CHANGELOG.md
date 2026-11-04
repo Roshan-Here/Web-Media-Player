@@ -4,6 +4,39 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-11-04
+
+### Added
+
+- Picture subtitles: Blu-ray (PGS), DVD (VobSub), digital TV (DVB) and DivX (XSUB) tracks play,
+  drawn where the file puts them and scaled with the picture, letterboxing included, and lifted
+  above the controls while they show. The subtitle look applies as far as a picture allows: its
+  size, position, a dark box behind it, and the colour of plain white text with a dark edge
+  (coloured signs keep their colours). The look panel then offers only those, with a word on
+  why. The default look draws the pictures exactly as filed.
+- The Episodes panel: the `episodes` prop (`PlayerEpisodes`) adds an Episodes button beside
+  Subtitles, listing a season at a time with the one playing opened up (its picture, overview,
+  "Now playing"), any other a press away, and a Play on its picture; several seasons go back
+  to the list of them from the season's title.
+- A Next episode button beside Episodes when `upNext` is set.
+- The paused screen: left paused for 20 seconds, the scene dims under what is being watched
+  (the `loader`'s title, line and overview) and "Paused", until it plays again; a move brings
+  the controls up over it. `pausedInfo` sets the wait or turns it off.
+- The look panel and the online subtitle panel move by their title bar, inside the player, and
+  open where they were left; a double click puts them back.
+- The timeline shows what is downloaded ahead, which now reaches about a minute and a half of
+  the video (Web-Buildin-decoder 0.3.0).
+- New labels: `pictureNote`, `movePanel`, `pausedWatching`, `paused`, `episodes`, `episodesOf`,
+  `episodesSeason`, `episodesAllSeasons`, `episodesClose`, `episodesCount`,
+  `episodesNowPlaying`, `episodesPlay`, `episodesWatched`, `nextEpisodeNamed`.
+
+### Changed
+
+- Needs Web-Buildin-decoder 0.3.0.
+- A wait for data shows the spinner only after 0.7 s, and then for at least 0.6 s: a skip into
+  what is already downloaded (about half a second) shows none, and a longer wait no flicker.
+- The demo has a third episode, with Blu-ray subtitles, and the Episodes panel.
+
 ## [0.2.0] - 2026-10-28
 
 ### Added
@@ -71,5 +104,6 @@ First release.
   touch the page, an `accentColor` prop, and theming through CSS variables.
 - An imperative handle (`ref`) to play, pause, seek and read diagnostics.
 
+[0.3.0]: https://github.com/Roshan-Here/Web-Media-Player/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Roshan-Here/Web-Media-Player/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Roshan-Here/Web-Media-Player/releases/tag/v0.1.0

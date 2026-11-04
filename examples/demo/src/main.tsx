@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import {
   Player,
   createStillWatching,
+  type PlayerEpisodes,
   type PlayerHandle,
   type PlayerSource,
   type SubtitleFile,
@@ -18,6 +19,8 @@ interface Episode {
   source: PlayerSource
   title: string
   line: string
+  name?: string
+  overview?: string
 }
 
 const EPISODES: Episode[] = [
@@ -31,7 +34,22 @@ const EPISODES: Episode[] = [
     title: 'Northern Lights',
     line: 'Episode 2 · H.264 and AAC in MP4',
   },
+  {
+    source: { url: '/media/northern-lights-pgs.mkv', key: 'northern-lights-3' },
+    title: 'Northern Lights',
+    line: 'Episode 3 · Blu-ray (PGS) subtitles, drawn as pictures',
+  },
 ]
+
+const NAMES = ['The Fjord', 'The Valley', 'The Ridge']
+const OVERVIEWS = [
+  'A night on the northern coast, when the sky starts to move.',
+  'The same night as H.264 in MP4, which the browser’s own decoder plays too.',
+  'Subtitles as a Blu-ray carries them: pictures, which the subtitle look still resizes, lifts and recolours.',
+]
+
+/** `?pausedAfter=2` shows the paused screen after two seconds (the browser check uses it). */
+const pausedAfter = Number(new URLSearchParams(location.search).get('pausedAfter')) || true
 
 const SUBTITLES: SubtitleFile[] = [{ label: 'Français', language: 'fr', src: '/media/fr.vtt' }]
 
@@ -63,6 +81,35 @@ function Demo() {
         : null,
     [next],
   )
+  // The show's episodes, for the Episodes button beside Subtitles.
+  const episodes = useMemo<PlayerEpisodes | null>(
+    () =>
+      custom
+        ? null
+        : {
+            showTitle: 'Northern Lights',
+            season: 1,
+            onSeason: () => undefined,
+            seasons: [
+              {
+                number: 1,
+                episodes: EPISODES.map((e, i) => ({
+                  key: String(i + 1),
+                  number: i + 1,
+                  name: NAMES[i] ?? `Episode ${i + 1}`,
+                  overview: OVERVIEWS[i] ?? '',
+                  art: <img className="episode-art" src="/media/backdrop.jpg" alt="" />,
+                  duration: 150,
+                  share: 0,
+                  watched: false,
+                  current: i === episode,
+                  play: () => setEpisode(i),
+                })),
+              },
+            ],
+          },
+    [custom, episode],
+  )
 
   return (
     <div className="page">
@@ -89,6 +136,8 @@ function Demo() {
             subtitles={custom ? undefined : SUBTITLES}
             onlineSubtitles={{ service: subtitleService }}
             upNext={upNext}
+            episodes={episodes}
+            pausedInfo={pausedAfter}
             accentColor={accent}
             layout={mini ? 'mini' : 'page'}
             onToggleMiniplayer={() => setMini((m) => !m)}
@@ -99,9 +148,8 @@ function Demo() {
                 ? { title: current.title }
                 : {
                     title: current.title,
-                    line: current.line,
-                    overview:
-                      'A night on the northern coast, when the sky starts to move. A short film made entirely in ffmpeg to show what the player can do.',
+                    line: `S1 E${episode + 1}  ·  ${NAMES[episode]}`,
+                    overview: OVERVIEWS[episode] ?? '',
                     backdrop: '/media/backdrop.jpg',
                     poster: '/media/poster.jpg',
                   }

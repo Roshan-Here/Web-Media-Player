@@ -175,3 +175,10 @@ footer {
   color: var(--muted);
   font-size: 14px;
 }
+
+.episode-art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}

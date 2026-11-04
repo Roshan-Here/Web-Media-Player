@@ -24,6 +24,7 @@ import { useMediaState } from '../hooks/useMediaState.js'
 import { useSeek } from '../hooks/useSeek.js'
 import { useSeekPreview } from '../hooks/useSeekPreview.js'
 import { useSkip } from '../hooks/useSkip.js'
+import { useSteady } from '../hooks/useSteady.js'
 import { useSubtitleStyle } from '../hooks/useSubtitleStyle.js'
 import { useUpNext, type UpNext } from '../hooks/useUpNext.js'
 import { chapterIndexAt, chapterJump } from '../lib/chapters.js'
@@ -63,9 +64,12 @@ import {
 } from '../lib/subtitle-style.js'
 import { SwapIcon, VolumeIcon } from './AnimatedIcons.js'
 import { Button } from './Button.js'
+import { EpisodesPanel, type PlayerEpisodes } from './EpisodesPanel.js'
 import { ControlButton } from './ControlButton.js'
 import { Icon, type IconName } from './Icon.js'
 import { MenuButton, type MenuSection } from './Menu.js'
+import { PAUSED_INFO_AFTER_MS, PausedInfo } from './PausedInfo.js'
+import { PictureSubtitles } from './PictureSubtitles.js'
 import { PipWindow } from './PipWindow.js'
 import { PlayerLoader, loaderStatus, type LoaderInfo } from './PlayerLoader.js'
 import { SeekBar } from './SeekBar.js'
@@ -116,6 +120,18 @@ export interface PlayerProps {
   upNext?: UpNext | null
   /** Offer and play `upNext` by itself. Default `true`. */
   autoplayNext?: boolean
+  /**
+   * The show's episodes, for an Episodes button beside Subtitles: a season at a time, the one
+   * playing opened up with its picture and overview, any other a press away, and Play on it.
+   * Play the chosen one by changing `source` (the same player, so full screen carries on).
+   */
+  episodes?: PlayerEpisodes | null
+  /**
+   * After the video has been left paused this long, the scene dims under what is being watched
+   * (the `loader`'s title, line and overview, else `title`) and "Paused", until it plays again.
+   * Seconds; `true` (the default) is 20, `false` turns it off.
+   */
+  pausedInfo?: boolean | number
   /**
    * Full size (`'page'`), or the compact miniplayer (`'mini'`) for docking in a corner while
    * the viewer browses. Playback carries on without a hitch across a change.
@@ -230,6 +246,8 @@ function PlayerView({
   skipButton = true,
   upNext,
   autoplayNext = true,
+  episodes,
+  pausedInfo = true,
   layout = 'page',
   onToggleMiniplayer,
   onClose,
@@ -266,6 +284,7 @@ function PlayerView({
     status,
     phase,
     caption,
+    picture,
     audio,
     subtitles,
     selectAudio,
@@ -335,6 +354,8 @@ function PlayerView({
     engine?.setSubtitleDelay(subtitleDelay)
   }, [engine, subtitleDelay])
   const [stylePanelOpen, setStylePanelOpen] = useState(false)
+  const [episodesOpen, setEpisodesOpen] = useState(false)
+  if (episodesOpen && (layout === 'mini' || !episodes)) setEpisodesOpen(false)
   // The key handler reads the latest timing without being added again on every change.
   const subtitleDelayRef = useRef(subtitleDelay)
   const setDelayRef = useRef(setSubtitleDelay)
@@ -490,6 +511,23 @@ function PlayerView({
     },
     [],
   )
+
+  // Left paused a while, the scene dims under what is being watched (PausedInfo), and stays so
+  // until the video plays again. A move brings the controls up over it.
+  const restAfterMs =
+    pausedInfo === false
+      ? null
+      : typeof pausedInfo === 'number'
+        ? Math.max(0, pausedInfo * 1000)
+        : PAUSED_INFO_AFTER_MS
+  const [restingPaused, setRestingPaused] = useState(false)
+  useEffect(() => {
+    if (!state.paused || state.ended || restAfterMs === null) return
+    const timer = setTimeout(() => setRestingPaused(true), restAfterMs)
+    return () => clearTimeout(timer)
+  }, [state.paused, state.ended, restAfterMs])
+  if (restingPaused && (!state.paused || state.ended || restAfterMs === null))
+    setRestingPaused(false)
 
   const togglePlay = useCallback(() => {
     if (!media) return
@@ -682,6 +720,8 @@ function PlayerView({
         if (!(target instanceof HTMLInputElement && target.type === 'range')) return
       }
       if (target?.closest('[role="menu"]')) return
+      // A panel over the picture (the episodes) keeps its own keys: Space presses its buttons.
+      if (target?.closest('[data-player-panel]')) return
       // Moving between the page and the miniplayer works before (or without) a picture.
       if (event.key === 'i' && onToggleMiniplayer) {
         event.preventDefault()
@@ -984,19 +1024,42 @@ function PlayerView({
   const opened =
     phase === 'started' || status.kind === 'failed' || (ready && !state.paused && !state.waiting)
   const preRoll = !mini && loader != null && !loaderGone
+  const inWindow = pip?.kind === 'window'
+  const showPausedInfo =
+    restingPaused &&
+    ready &&
+    opened &&
+    state.paused &&
+    !state.ended &&
+    !mini &&
+    !inWindow &&
+    !menuOpen &&
+    !scrubbing &&
+    !online.panelOpen &&
+    !stylePanelOpen &&
+    !episodesOpen &&
+    next.phase.kind !== 'ask'
+  // Paused, the controls stay up; over the paused screen, only while the pointer moves.
   const controlsVisible =
     !ready ||
     active ||
-    state.paused ||
+    (state.paused && !showPausedInfo) ||
     menuOpen ||
     scrubbing ||
     stylePanelOpen ||
+    episodesOpen ||
     (online.panelOpen && !mini)
+  // A wait for data shows the spinner only when it lasts, and then steadily.
+  const buffering = useSteady(ready && state.waiting && !state.paused)
+  // A picture subtitle from the file is on: the look panel offers what applies to pictures.
+  const pictureTrack =
+    !online.attached &&
+    external.selected === null &&
+    subtitles.options.find((o) => o.id === subtitles.selected)?.picture === true
   const selectableSubtitles = subtitles.options.filter((o) => o.selectable)
   const otherDecoder: EngineKind = decoder === 'builtin' ? 'browser' : 'builtin'
   const canSwitch = otherDecoder === 'builtin' || browserCanPlay
   const muted = state.muted || state.volume === 0
-  const inWindow = pip?.kind === 'window'
   const playedShare = state.duration > 0 ? Math.min(1, shownTime / state.duration) : 0
 
   const accentStyle = accentColor
@@ -1070,6 +1133,16 @@ function PlayerView({
           />
         ) : null}
 
+        {picture && !online.attached && external.selected === null && !inWindow ? (
+          <PictureSubtitles
+            frame={picture}
+            videoWidth={videoSizeOf(media).width}
+            videoHeight={videoSizeOf(media).height}
+            controlsShown={controlsVisible && !mini}
+            look={subStyle}
+          />
+        ) : null}
+
         {shownCaption && !inWindow ? (
           <div
             className={cx(
@@ -1098,14 +1171,22 @@ function PlayerView({
           </div>
         ) : null}
 
+        {!mini && ready && opened && restAfterMs !== null ? (
+          <PausedInfo
+            shown={showPausedInfo}
+            title={loader?.title || title}
+            line={loader?.line ?? ''}
+            overview={loader?.overview ?? ''}
+          />
+        ) : null}
+
         <div className="mp:pointer-events-none mp:absolute mp:inset-0 mp:grid mp:place-items-center">
-          {preRoll && !opened ? null : status.kind === 'loading' ||
-            (ready && state.waiting && !state.paused) ? (
+          {preRoll && !opened ? null : status.kind === 'loading' || buffering ? (
             <Spinner
               size={mini ? 28 : 40}
               label={status.kind === 'loading' ? t('opening') : t('loading')}
             />
-          ) : ready && state.paused && !scrubbing && !inWindow && !mini ? (
+          ) : ready && state.paused && !scrubbing && !inWindow && !mini && !showPausedInfo ? (
             <button
               type="button"
               className="mp:pointer-events-auto mp:grid mp:size-18 mp:place-items-center mp:rounded-full mp:bg-bg/70 mp:text-ink mp:backdrop-blur-sm mp:transition-transform mp:duration-150 mp:ease-soft mp:hover:scale-106 mp:active:scale-[0.96]"
@@ -1395,6 +1476,34 @@ function PlayerView({
 
               <span className="mp:min-w-1 mp:flex-1" />
 
+              {upNext ? (
+                <ControlButton
+                  onClick={() => upNext.play(false)}
+                  disabled={!ready}
+                  aria-label={t('nextEpisodeNamed', { label: upNext.label })}
+                  title={t('nextEpisodeNamed', { label: upNext.label })}
+                  data-next-episode=""
+                >
+                  <Icon name="next" size={20} />
+                </ControlButton>
+              ) : null}
+
+              {episodes ? (
+                <ControlButton
+                  on={episodesOpen}
+                  onClick={() => {
+                    setStylePanelOpen(false)
+                    online.closePanel()
+                    setEpisodesOpen((open) => !open)
+                  }}
+                  aria-label={t('episodes')}
+                  aria-expanded={episodesOpen}
+                  title={t('episodes')}
+                >
+                  <Icon name="episodes" size={20} />
+                </ControlButton>
+              ) : null}
+
               <MenuButton
                 label={t('subtitles')}
                 onOpenChange={setMenuOpen}
@@ -1541,11 +1650,23 @@ function PlayerView({
           </div>
         )}
 
+        {episodesOpen && episodes && !mini ? (
+          <EpisodesPanel
+            episodes={episodes}
+            onClose={() => setEpisodesOpen(false)}
+            onPlay={(episode) => {
+              setEpisodesOpen(false)
+              episode.play()
+            }}
+          />
+        ) : null}
+
         {stylePanelOpen && !mini ? (
           <SubtitleStylePanel
             delay={subtitleDelay}
             onDelay={setSubtitleDelay}
             onClose={() => setStylePanelOpen(false)}
+            pictures={pictureTrack}
           />
         ) : null}
 
@@ -1614,6 +1735,7 @@ function PlayerView({
             engine={engine}
             title={title}
             caption={shownCaption}
+            picture={online.attached || external.selected !== null ? null : picture}
             seekTarget={seek.target}
             onSeek={seek.seekTo}
             onSeekBy={seek.seekBy}
@@ -1793,4 +1915,10 @@ function SkipPill({
  */
 function canElementFullscreen(element: HTMLElement): boolean {
   return typeof element.requestFullscreen === 'function' && document.fullscreenEnabled === true
+}
+
+/** The video's own size, for where its picture sits in the player; 0 when not known yet. */
+function videoSizeOf(media: MediaLike | null): { width: number; height: number } {
+  const sized = media as (MediaLike & { videoWidth?: number; videoHeight?: number }) | null
+  return { width: sized?.videoWidth ?? 0, height: sized?.videoHeight ?? 0 }
 }

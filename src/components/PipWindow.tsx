@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Roshan-Here (https://github.com/Roshan-Here) - Web-Media-Player
 
+import type { PictureFrame } from 'web-buildin-decoder'
 import { useEffect, useRef, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { useMediaState } from '../hooks/useMediaState.js'
@@ -10,6 +11,7 @@ import type { MediaEngine } from '../lib/engine.js'
 import { formatDuration } from '../lib/format.js'
 import { useT } from '../lib/labels.js'
 import { captionCss } from '../lib/subtitle-style.js'
+import { PictureSubtitles } from './PictureSubtitles.js'
 import { SwapIcon } from './AnimatedIcons.js'
 import { Icon } from './Icon.js'
 import { SeekBar } from './SeekBar.js'
@@ -19,6 +21,8 @@ export interface PipWindowProps {
   engine: MediaEngine
   title: string
   caption: string | null
+  /** Picture subtitles (PGS, VobSub, DVB, XSUB) on screen, if any. */
+  picture?: PictureFrame | null
   /** Where playback is going while a seek is under way. */
   seekTarget: number | null
   onSeek: (time: number, now?: boolean) => void
@@ -41,6 +45,7 @@ export function PipWindow({
   engine,
   title,
   caption,
+  picture = null,
   seekTarget,
   onSeek,
   onSeekBy,
@@ -92,6 +97,14 @@ export function PipWindow({
       style={style}
     >
       <div ref={pictureRef} className="mp:absolute mp:inset-0" onClick={togglePlay} />
+      {picture ? (
+        <PictureSubtitles
+          frame={picture}
+          videoWidth={(media as { videoWidth?: number }).videoWidth ?? 0}
+          videoHeight={(media as { videoHeight?: number }).videoHeight ?? 0}
+          look={subStyle}
+        />
+      ) : null}
       {caption ? (
         <div className="mp:pointer-events-none mp:absolute mp:bottom-16 mp:left-1/2 mp:w-max mp:max-w-[90%] mp:-translate-x-1/2 mp:text-center mp:leading-snug mp:whitespace-pre-line">
           <span style={captionCss(subStyle, 'clamp(13px, 4.2vw, 22px)')}>{caption}</span>

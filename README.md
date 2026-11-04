@@ -41,7 +41,8 @@ Created by **[Roshan-Here](https://github.com/Roshan-Here)**.
   AAC, AC-3, E-AC-3, DTS, TrueHD and Opus. HEVC without a hardware decoder switches to software
   decoding on its own.
 - **Every track.** Switch audio tracks while playing; show the file's own subtitles (SRT,
-  ASS/SSA, WebVTT, MP4 text) or subtitle files you pass in.
+  ASS/SSA, WebVTT, MP4 text, and Blu-ray, DVD and TV picture subtitles: PGS, VobSub, DVB, XSUB)
+  or subtitle files you pass in.
 - **A timeline that helps.** Chapters as segments, a preview of the scene under the pointer,
   the chapter's name over the time, and seeking that merges a burst of clicks or key presses
   into one seek.
@@ -49,9 +50,14 @@ Created by **[Roshan-Here](https://github.com/Roshan-Here)**.
   OpenSubtitles (and SubDL, with the viewer's own key), best match first by file hash, show and
   episode, and keeps them in the browser. Or plug in your own source.
 - **Subtitles your way.** Size, colour, background box, edge, position and typeface, plus
-  timing per video, all remembered.
+  timing per video, all remembered; picture subtitles take the size, position, box and colour
+  too. The subtitle panels move out of the way by their title bar.
 - **Streaming-app touches.** "Skip intro" (and recap, opening, credits), an Up Next card and
-  countdown, "Still watching?", a pre-roll with backdrop and poster while the video opens.
+  countdown, "Still watching?", a pre-roll with backdrop and poster while the video opens, an
+  Episodes panel and a Next episode button, and a paused screen that says what is being
+  watched.
+- **Loads ahead.** About a minute and a half of the video downloads ahead of the picture (as
+  much as the device can hold), shown on the timeline, so a skip forward rarely waits.
 - **Picture in picture** in a floating window with its own controls (Chrome and Edge), the
   system's elsewhere, and a **miniplayer** layout that docks in a corner without a hitch.
 - **Plays from anywhere.** A URL (any server with Range requests), a file from the viewer's
@@ -279,6 +285,52 @@ const upNext = {
 }
 ```
 
+### Episodes
+
+Pass the show's episodes and the player adds an Episodes button beside Subtitles: a panel over
+the picture listing a season at a time, the one playing opened up with its picture and
+overview, any other a press away, and its picture or Play button starting it.
+
+```tsx
+<Player
+  source={episodes[current].source}
+  episodes={{
+    showTitle: 'Northern Lights',
+    season: 1, // the season shown
+    onSeason: (season) => setSeason(season), // the viewer picked another season
+    seasons: [
+      {
+        number: 1,
+        episodes: list.map((e, i) => ({
+          key: e.id,
+          number: i + 1,
+          name: e.name,
+          overview: e.overview,
+          art: <img src={e.still} alt="" />, // 16:9
+          duration: e.seconds,
+          share: e.watchedShare, // 0 to 1
+          watched: e.finished,
+          current: i === current,
+          play: () => setCurrent(i),
+        })),
+      },
+    ],
+  }}
+/>
+```
+
+Play an episode (from here or from `upNext`) by giving the same player a new `source`: playback
+moves over without the player being rebuilt, so full screen, picture in picture and the
+viewer's choices carry on into the next episode. A player that is unmounted and mounted again
+(a `key` that changes, a new page) leaves full screen, as any element would. With `upNext` set,
+a Next episode button sits beside Episodes too.
+
+### Paused
+
+Left paused for 20 seconds, the scene dims under "You're watching", the `loader`'s title, line
+(season and episode) and overview, and "Paused", as streaming apps show it, until the video
+plays again. `pausedInfo={8}` waits 8 seconds instead; `pausedInfo={false}` turns it off.
+
 ### The pre-roll
 
 ```tsx
@@ -455,6 +507,8 @@ so nothing jumps when it does.
 | `skipButton`         | `boolean`                        | `true`                 | Show the Skip button                                                                |
 | `upNext`             | `UpNext`                         |                        | The next episode                                                                    |
 | `autoplayNext`       | `boolean`                        | `true`                 | Offer and play `upNext` by itself                                                   |
+| `episodes`           | `PlayerEpisodes`                 |                        | The show's episodes, for the Episodes panel                                         |
+| `pausedInfo`         | `boolean \| number`              | `true` (20 s)          | The paused screen, after this many seconds paused                                   |
 | `loader`             | `LoaderInfo`                     |                        | The pre-roll                                                                        |
 | `layout`             | `'page' \| 'mini'`               | `'page'`               | Full player or miniplayer                                                           |
 | `onToggleMiniplayer` | `() => void`                     |                        | Shows the miniplayer button; switches layout                                        |
@@ -533,7 +587,8 @@ npm run screenshots    # regenerates the images in this README
 ```
 
 The demo film, its poster and subtitles are generated with ffmpeg by `scripts/fixtures.sh`, so
-the repository carries no third-party footage. See [CONTRIBUTING.md](CONTRIBUTING.md).
+the repository carries no third-party footage; its Blu-ray subtitle track is written by
+`scripts/make-picture-subs.ts` (Node 22.6 or later). See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Credits
 

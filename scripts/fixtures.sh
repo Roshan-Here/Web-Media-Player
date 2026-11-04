@@ -4,7 +4,8 @@
 # the demo and the screenshots carry no third-party footage. CI makes a quicker version with
 # SIZE=640x360 PRESET=ultrafast: the same tracks, chapters and subtitles in a smaller picture.
 set -e
-dir="$(cd "$(dirname "$0")/.." && pwd)/examples/demo/public/media"
+root="$(cd "$(dirname "$0")/.." && pwd)"
+dir="$root/examples/demo/public/media"
 mkdir -p "$dir"
 cd "$dir"
 FONT="${FONT:-$(fc-match -f '%{file}' 'Inter Display:bold' 2>/dev/null || true)}"
@@ -134,6 +135,13 @@ ffmpeg -loglevel error -y -f lavfi -i "$SKY" -f lavfi -i "$GLOW" -f lavfi -i "$C
 # The same film as H.264 + AAC MP4, which the browser's own decoder can play too.
 ffmpeg -loglevel error -y -i northern-lights.mkv -map 0:v -map 0:a:1 -c:v libx264 -preset veryfast \
   -crf 24 -pix_fmt yuv420p -c:a copy -movflags +faststart northern-lights.mp4
+
+# Episode 3: the H.264 film with a Blu-ray (PGS) subtitle track, pictures instead of text.
+node --experimental-strip-types --no-warnings "$root/scripts/make-picture-subs.ts" picture-subs.sup
+ffmpeg -loglevel error -y -i northern-lights.mp4 -i picture-subs.sup -map 0:v -map 0:a -map 1:s \
+  -c copy -copyts -metadata:s:s:0 language=eng -metadata:s:s:0 title="English (Blu-ray)" \
+  northern-lights-pgs.mkv
+rm picture-subs.sup
 
 # A backdrop (a frame of the film) and a poster for the pre-roll.
 ffmpeg -loglevel error -y -ss 70 -i northern-lights.mkv -frames:v 1 -q:v 3 backdrop.jpg

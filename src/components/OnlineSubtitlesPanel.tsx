@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Roshan-Here (https://github.com/Roshan-Here) - Web-Media-Player
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useDragPanel } from '../hooks/useDragPanel.js'
 import { cx } from '../lib/cx.js'
 import { useT } from '../lib/labels.js'
 import type {
@@ -64,6 +65,8 @@ export function OnlineSubtitlesPanel({
     () => version,
   )
   const panelRef = useRef<HTMLDivElement | null>(null)
+  // Moved by its title bar, as the look panel is.
+  const drag = useDragPanel(panelRef, 'online-subtitles-panel-offset')
 
   useEffect(() => {
     panelRef.current?.focus()
@@ -134,9 +137,19 @@ export function OnlineSubtitlesPanel({
           onClose()
         }
       }}
+      style={drag.style}
       data-online-subtitles=""
     >
-      <div className="mp:flex mp:items-center mp:gap-2 mp:py-1.5 mp:pr-1.5 mp:pl-4">
+      <div
+        className={cx(
+          'mp:flex mp:touch-none mp:items-center mp:gap-2 mp:py-1.5 mp:pr-1.5 mp:pl-2.5 mp:select-none',
+          drag.dragging ? 'mp:cursor-grabbing' : 'mp:cursor-grab',
+        )}
+        title={t('movePanel')}
+        data-panel-handle=""
+        {...drag.handleProps}
+      >
+        <Icon name="grip" size={16} className="mp:shrink-0 mp:text-faint" />
         <h2 className="mp:flex-1 mp:truncate mp:text-base mp:font-semibold">{t('onlineTitle')}</h2>
         <button
           type="button"

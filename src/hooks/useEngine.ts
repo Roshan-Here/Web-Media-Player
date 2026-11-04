@@ -7,6 +7,7 @@ import {
   logDecoder as logPlayer,
   preloadDecoder,
   type ByteSource,
+  type PictureFrame,
 } from 'web-buildin-decoder'
 import { PlayWhenReady } from '../lib/autoplay.js'
 import { createBrowserEngine, EngineUnavailableError } from '../lib/browser-engine.js'
@@ -76,6 +77,8 @@ export function useEngine({
   const [status, setStatus] = useState<EngineStatus>({ kind: 'loading' })
   const [phase, setPhase] = useState<LoaderPhase>('file')
   const [caption, setCaption] = useState<string | null>(null)
+  // Picture subtitles (PGS, VobSub, DVB, XSUB) on screen, as the engine decodes them.
+  const [picture, setPicture] = useState<PictureFrame | null>(null)
   const [audio, setAudio] = useState<TrackList>(emptyTracks)
   const [subtitles, setSubtitles] = useState<TrackList>(emptyTracks)
   const [notice, setNotice] = useState<string | null>(null)
@@ -130,6 +133,7 @@ export function useEngine({
     setPhase('file')
     setEngine(null)
     setCaption(null)
+    setPicture(null)
     setAudio(emptyTracks)
     setSubtitles(emptyTracks)
     setSoundBlocked(false)
@@ -237,6 +241,7 @@ export function useEngine({
         }
         unsubscribe.push(next.onTracks(refreshTracks))
         unsubscribe.push(next.onCaption(setCaption))
+        if (next.onPicture) unsubscribe.push(next.onPicture(setPicture))
         unsubscribe.push(next.onFailure((failure) => setStatus({ kind: 'failed', failure })))
         setEngine(next)
         setStatus({ kind: 'ready' })
@@ -361,6 +366,7 @@ export function useEngine({
     status,
     phase,
     caption,
+    picture,
     audio,
     subtitles,
     selectAudio,

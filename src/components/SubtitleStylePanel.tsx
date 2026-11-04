@@ -2,7 +2,9 @@
 // Copyright (c) 2026 Roshan-Here (https://github.com/Roshan-Here) - Web-Media-Player
 
 import { useEffect, useRef } from 'react'
+import { useDragPanel } from '../hooks/useDragPanel.js'
 import { useSubtitleStyle } from '../hooks/useSubtitleStyle.js'
+import { cx } from '../lib/cx.js'
 import { useT } from '../lib/labels.js'
 import {
   DELAY_MAX,
@@ -22,10 +24,13 @@ export function SubtitleStylePanel({
   delay,
   onDelay,
   onClose,
+  pictures = false,
 }: {
   delay: number
   onDelay: (seconds: number) => void
   onClose: () => void
+  /** The subtitle chosen is a picture one: the look offers only what applies to it. */
+  pictures?: boolean
 }) {
   const t = useT()
   const style = useSubtitleStyle()
@@ -33,6 +38,8 @@ export function SubtitleStylePanel({
   useEffect(() => {
     panelRef.current?.focus()
   }, [])
+  // Moved by its title bar, out of the way of the subtitles it changes.
+  const drag = useDragPanel(panelRef, 'subtitle-panel-offset')
   const isDefault = JSON.stringify(style) === JSON.stringify(DEFAULT_STYLE)
 
   return (
@@ -48,9 +55,19 @@ export function SubtitleStylePanel({
           onClose()
         }
       }}
+      style={drag.style}
       data-subtitle-style=""
     >
-      <div className="mp:flex mp:items-center mp:gap-2 mp:py-1.5 mp:pr-1.5 mp:pl-4">
+      <div
+        className={cx(
+          'mp:flex mp:touch-none mp:items-center mp:gap-2 mp:py-1.5 mp:pr-1.5 mp:pl-2.5 mp:select-none',
+          drag.dragging ? 'mp:cursor-grabbing' : 'mp:cursor-grab',
+        )}
+        title={t('movePanel')}
+        data-panel-handle=""
+        {...drag.handleProps}
+      >
+        <Icon name="grip" size={16} className="mp:shrink-0 mp:text-faint" />
         <h2 className="mp:flex-1 mp:truncate mp:text-base mp:font-semibold">{t('lookTitle')}</h2>
         <button
           type="button"
@@ -111,6 +128,7 @@ export function SubtitleStylePanel({
           value={style}
           onChange={(change) => subtitleStyle.set(change)}
           compact
+          pictures={pictures}
         />
 
         {isDefault ? null : (

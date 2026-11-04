@@ -3,9 +3,9 @@
 
 /**
  * Web-Media-Player: a complete video player for the web, built for React. It plays MKV, HEVC,
- * AC-3, DTS, multiple audio tracks and embedded subtitles in the browser, with a timeline with
- * previews and chapters, a subtitle look panel, picture in picture, a miniplayer, "Skip intro"
- * and Up Next.
+ * AC-3, DTS, multiple audio tracks and embedded subtitles (text, and Blu-ray, DVD and TV
+ * pictures) in the browser, with a timeline with previews and chapters, a subtitle look panel,
+ * picture in picture, a miniplayer, "Skip intro", Up Next, an Episodes panel and a paused screen.
  *
  * Copyright (c) 2026 Roshan-Here (https://github.com/Roshan-Here). MIT licence.
  */
@@ -19,6 +19,7 @@ export {
 export type { PlayerSource, SourceUrl } from './lib/source.js'
 export type { SubtitleFile } from './hooks/useExternalSubtitles.js'
 export type { UpNext } from './hooks/useUpNext.js'
+export type { PlayerEpisodes, PlayerEpisode, PlayerSeason } from './components/EpisodesPanel.js'
 export {
   PlayerLoader,
   loaderStatus,
@@ -116,4 +117,4 @@ export type {
   TrackList,
   TrackOption,
 } from './lib/engine.js'
-export { preloadDecoder, type ByteSource } from 'web-buildin-decoder'
+export { preloadDecoder, type ByteSource, type PictureFrame } from 'web-buildin-decoder'

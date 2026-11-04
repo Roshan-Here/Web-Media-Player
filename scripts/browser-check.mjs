@@ -2,7 +2,9 @@
 // tracks and chapters are listed, subtitles (the file's own and a subtitle file) show, "Skip
 // opening" skips, keyboard shortcuts work, the browser decoder plays the MP4, the miniplayer
 // keeps the same playback, a missing file shows the error panel, and the page's own CSS does
-// not reach inside the player.
+// not reach inside the player; the read ahead shows on the timeline, the subtitle panels move,
+// full screen carries on into the next episode, the Episodes panel plays an episode, Blu-ray
+// (PGS) subtitles are drawn, and the paused screen comes and goes.
 //
 //   npm run fixtures && npm run test:browser      (needs `npx playwright install chromium`)
 import { chromium } from 'playwright'
@@ -55,6 +57,11 @@ try {
 
   console.log('Built-in decoder, HEVC + AC-3 Matroska')
   check(await at(2), 'plays')
+  const ahead = await page.evaluate(() => {
+    const m = window.player.current.media
+    return m.buffered.length > 0 ? m.buffered.end(m.buffered.length - 1) - m.currentTime : 0
+  })
+  check(ahead > 20, `shows what is loaded ahead on the timeline (${ahead.toFixed(0)} s)`)
   await wake()
   await page.getByRole('button', { name: 'Audio track', exact: true }).click()
   const audio = await page.getByRole('menuitemradio').allInnerTexts()
@@ -153,6 +160,22 @@ try {
     `the page’s button styles stay out (padding ${padding})`,
   )
 
+  console.log('Panels')
+  await wake()
+  await page.getByRole('button', { name: 'Subtitles', exact: true }).click()
+  await page.getByRole('menuitemradio', { name: /Look and timing/ }).click()
+  const look = page.getByRole('dialog', { name: 'Subtitle look and timing' })
+  const lookAt = await look.boundingBox()
+  const bar = await look.locator('[data-panel-handle]').boundingBox()
+  await page.mouse.move(bar.x + 40, bar.y + 10)
+  await page.mouse.down()
+  await page.mouse.move(bar.x - 260, bar.y + 10, { steps: 6 })
+  await page.mouse.up()
+  const after = await look.boundingBox()
+  check(Math.abs(after.x - (lookAt.x - 300)) < 2, 'the look panel moves by its title bar')
+  await look.locator('[data-panel-handle] h2').dblclick()
+  await page.keyboard.press('Escape')
+
   console.log('Miniplayer')
   const engineBefore = await page.evaluate(
     () => (window.__engine = window.player.current.engine) !== null,
@@ -171,9 +194,17 @@ try {
     (await page.locator('[data-up-next]').count()) === 1,
     'offers the next episode near the end',
   )
+  await wake()
+  await page.getByRole('button', { name: 'Full screen', exact: true }).click()
+  await page.waitForTimeout(400)
   await page.getByRole('button', { name: 'Play now' }).click()
   await page.waitForTimeout(500)
   check(await at(1), 'plays the next episode')
+  const stillFull = await page.evaluate(
+    () => document.fullscreenElement?.classList.contains('mp-root') ?? false,
+  )
+  check(stillFull, 'stays in full screen into the next episode')
+  await page.evaluate(() => document.exitFullscreen())
   await wake()
   await page.getByRole('button', { name: 'Playback settings' }).click()
   await page.getByRole('menuitemradio', { name: /^Browser/ }).click()
@@ -181,6 +212,78 @@ try {
   const kind = await page.evaluate(() => window.player.current.engine?.kind)
   check(kind === 'browser', 'switches to the browser decoder')
   check(await at(2), 'the browser decoder plays')
+
+  console.log('Episodes, Blu-ray subtitles')
+  // Back to the built-in decoder, which draws picture subtitles.
+  if ((await page.locator('[role="alert"]').count()) > 0)
+    await page
+      .locator('[role="alert"]')
+      .getByRole('button', { name: /built-in/i })
+      .click()
+  else {
+    await wake()
+    await page.getByRole('button', { name: 'Playback settings' }).click()
+    await page.getByRole('menuitemradio', { name: /^Built-in/ }).click()
+  }
+  await page.waitForTimeout(1500)
+  await wake()
+  await page.getByRole('button', { name: 'Episodes', exact: true }).click()
+  const list = page.getByRole('dialog', { name: 'Episodes of Northern Lights' })
+  const rows = await list.locator('li').count()
+  const current = await list.locator('li[data-current]').getAttribute('data-open')
+  check(rows === 3 && current === '', 'lists the episodes, the one playing opened up')
+  await list.getByRole('button', { name: /The Ridge/ }).click()
+  await list.getByRole('button', { name: 'Play episode 3, The Ridge' }).click()
+  check(await at(1.5), 'plays the episode chosen there')
+  await page.evaluate(() => window.player.current.seekTo(41.5))
+  await wake()
+  await page.getByRole('button', { name: 'Subtitles', exact: true }).click()
+  await page.getByRole('menuitemradio', { name: /Blu-ray/ }).click()
+  const drawn = await settle(
+    page.waitForFunction(
+      () => {
+        const canvas = document.querySelector('[data-player-picture-subtitle]')
+        if (!canvas || canvas.width !== 1920) return false
+        const [r, g, b, a] = canvas.getContext('2d').getImageData(960, 960, 1, 1).data
+        return r > 200 && g > 200 && b > 200 && a > 200
+      },
+      null,
+      { timeout: 20_000 },
+    ),
+  )
+  check(drawn, 'draws Blu-ray (PGS) subtitles as pictures')
+  await wake()
+  await page.getByRole('button', { name: 'Subtitles', exact: true }).click()
+  await page.getByRole('menuitemradio', { name: /Look and timing/ }).click()
+  const note = await page.locator('[data-subtitle-picture-note]').count()
+  check(note === 1, 'the look panel says what a picture subtitle can take')
+  await page.keyboard.press('Escape')
+
+  console.log('Paused screen')
+  const paused = await browser.newPage({ viewport: { width: 1280, height: 860 } })
+  paused.on('pageerror', (error) => errors.push(error.message))
+  await paused.goto('http://localhost:5298/?pausedAfter=2')
+  await settle(
+    paused.waitForFunction(() => (window.player.current?.media?.currentTime ?? 0) >= 2, null, {
+      timeout: 60_000,
+    }),
+  )
+  const box = await paused.locator('.mp-root').boundingBox()
+  await paused.mouse.move(box.x + 200, box.y + 200)
+  await paused.keyboard.press('k')
+  const shown = await settle(paused.waitForSelector('[data-paused-info]', { timeout: 6000 }))
+  const words = shown ? await paused.locator('[data-paused-info]').innerText() : ''
+  check(
+    shown && words.includes('Northern Lights') && words.includes('Paused'),
+    'left paused, shows what is being watched',
+  )
+  await paused.mouse.move(box.x + 260, box.y + 240)
+  await paused.waitForTimeout(400)
+  check((await paused.locator('[data-paused-info]').count()) === 1, 'stays when the pointer moves')
+  await paused.keyboard.press(' ')
+  await paused.waitForTimeout(400)
+  check((await paused.locator('[data-paused-info]').count()) === 0, 'goes when it plays again')
+  await paused.close()
 
   console.log('Errors')
   await page.getByPlaceholder(/video URL/).fill(new URL('/media/missing.mkv', page.url()).href)

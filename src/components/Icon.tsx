@@ -7,11 +7,14 @@ import {
   ArrowSquareIn,
   ArrowSquareOut,
   ArrowsOutSimple,
+  Cards,
+  CaretLeft,
   CaretRight,
   Check,
   Copy,
   CornersIn,
   CornersOut,
+  DotsSixVertical,
   GearSix,
   ListBullets,
   MusicNotes,
@@ -58,12 +61,20 @@ const icons = {
   skip: SkipForward,
   /** A video's chapters. */
   chapters: ListBullets,
+  /** A show's episodes. */
+  episodes: Cards,
+  /** The next episode. */
+  next: SkipForward,
+  /** Back, to the list a panel came from. */
+  back: CaretLeft,
+  /** Where a panel is dragged by. */
+  grip: DotsSixVertical,
 } satisfies Record<string, PhosphorIcon>
 
 export type IconName = keyof typeof icons
 
 /** Glyphs that read better solid. */
-const filled = new Set<IconName>(['play', 'pause'])
+const filled = new Set<IconName>(['play', 'pause', 'next'])
 
 export interface IconProps {
   name: IconName

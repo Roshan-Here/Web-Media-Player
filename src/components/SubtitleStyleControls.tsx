@@ -24,15 +24,26 @@ export function SubtitleStyleControls({
   value,
   onChange,
   compact = false,
+  pictures = false,
 }: {
   value: SubtitleStyle
   onChange: (change: Partial<SubtitleStyle>) => void
   /** Tighter, for the panel over the picture. */
   compact?: boolean
+  /**
+   * The subtitle on screen is a picture from the file (PGS, VobSub, DVB, XSUB): its typeface
+   * and edge are drawn into it, so only what can change it is offered, with a word on why.
+   */
+  pictures?: boolean
 }) {
   const t = useT()
   return (
     <div className={cx('mp:grid', compact ? 'mp:gap-3.5' : 'mp:gap-5')}>
+      {pictures ? (
+        <p className="mp:m-0 mp:text-xs mp:text-faint" data-subtitle-picture-note="">
+          {t('pictureNote')}
+        </p>
+      ) : null}
       <Field label={t('styleSize')}>
         <Segmented
           label={t('styleSize')}
@@ -111,7 +122,7 @@ export function SubtitleStyleControls({
         </div>
       </Field>
 
-      {value.box ? null : (
+      {value.box || pictures ? null : (
         <Field label={t('styleEdge')}>
           <Segmented
             label={t('styleEdge')}
@@ -131,29 +142,31 @@ export function SubtitleStyleControls({
         />
       </Field>
 
-      <Field label={t('styleTypeface')}>
-        <div className="mp:flex mp:flex-wrap mp:items-center mp:gap-2">
-          <Segmented
-            label={t('styleTypeface')}
-            value={value.font}
-            options={FONTS.map((f) => ({
-              value: f.value,
-              label: t(f.label),
-              style: { fontFamily: f.css },
-            }))}
-            onChange={(font) => onChange({ font })}
-          />
-          <Segmented
-            label={t('styleWeight')}
-            value={value.bold ? 'bold' : 'regular'}
-            options={[
-              { value: 'regular', label: t('styleWeightRegular') },
-              { value: 'bold', label: t('styleWeightBold'), style: { fontWeight: 700 } },
-            ]}
-            onChange={(v) => onChange({ bold: v === 'bold' })}
-          />
-        </div>
-      </Field>
+      {pictures ? null : (
+        <Field label={t('styleTypeface')}>
+          <div className="mp:flex mp:flex-wrap mp:items-center mp:gap-2">
+            <Segmented
+              label={t('styleTypeface')}
+              value={value.font}
+              options={FONTS.map((f) => ({
+                value: f.value,
+                label: t(f.label),
+                style: { fontFamily: f.css },
+              }))}
+              onChange={(font) => onChange({ font })}
+            />
+            <Segmented
+              label={t('styleWeight')}
+              value={value.bold ? 'bold' : 'regular'}
+              options={[
+                { value: 'regular', label: t('styleWeightRegular') },
+                { value: 'bold', label: t('styleWeightBold'), style: { fontWeight: 700 } },
+              ]}
+              onChange={(v) => onChange({ bold: v === 'bold' })}
+            />
+          </div>
+        </Field>
+      )}
     </div>
   )
 }
